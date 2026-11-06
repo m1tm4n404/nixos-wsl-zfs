@@ -49,11 +49,11 @@
         kernel = wslKernel;
 
         # OpenZFS kernel module (spl.ko/zfs.ko) built against the kernel above.
-        zfs-kmod = wslKernelPackages.zfs;
+        zfs-kmod = wslKernelPackages.${pkgs.zfs.kernelModuleAttribute};
 
         # OpenZFS kernel module for the STOCK Windows-provided WSL2 kernel.
         # No kernel replacement needed; rebuild when Windows bumps `uname -r`.
-        zfs-kmod-stock = stockWslKernelPackages.zfs;
+        zfs-kmod-stock = stockWslKernelPackages.${pkgs.zfs.kernelModuleAttribute};
 
         # OpenZFS userspace from the same nixpkgs revision as the module,
         # so `zfs`/`zpool` versions always match the loaded kmod.
