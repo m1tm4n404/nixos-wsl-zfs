@@ -1,0 +1,36 @@
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: DeterminateSystems/nix-installer-action@v16
+
+      - name: Build kernel
+        run: nix build .#kernel -L -o kernel-out
+
+      - name: Build zfs kernel module
+        run: nix build .#zfs-kmod -L -o zfs-kmod-out
+
+      - name: Upload bzImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: bzImage-wsl-zfs
+          path: kernel-out/bzImage
+          if-no-files-found: error
+
+      - name: Upload zfs kmod
+        uses: actions/upload-artifact@v4
+        with:
+          name: zfs-kmod
+          path: |
+            zfs-kmod-out/lib/modules/**/*.ko*
+          if-no-files-found: error
