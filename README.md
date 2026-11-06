@@ -8,20 +8,35 @@ Microsoft WSL2 Linux **kernel with OpenZFS support** for [NixOS-WSL](https://git
 - NixOS-WSL does not manage its own kernel — it boots whatever Windows provides via `%USERPROFILE%\.wslconfig`.
 - Existing alternatives (e.g. [omasakun/wsl-zfs-module](https://github.com/omasakun/wsl-zfs-module)) ship prebuilt modules that must exactly match the Windows-provided kernel revision, which changes silently with Windows updates.
 
-This flake solves it the reproducible way:
+This flake solves it the reproducible way, with **two modes**:
 
-1. Builds the **Microsoft WSL2 kernel** from [microsoft/WSL2-Linux-Kernel](https://github.com/microsoft/WSL2-Linux-Kernel) (`linux-msft-wsl-6.18.y`, currently `6.18.58.1`) with Microsoft's own config **verbatim** — behavior matches the stock kernel, you just pin the version yourself.
-2. Builds the **OpenZFS kernel module** from the same nixpkgs revision against that exact kernel.
-3. Ships a NixOS module that loads `zfs.ko` at boot with matching `zfs`/`zpool` userspace, and **fails loudly** if the running kernel is not the one the module was built for.
+### Mode A: stock kernel (default, simplest)
+
+Keep the Windows-provided kernel. The flake builds the OpenZFS module against a vanilla [kernel.org](https://kernel.org) source release versioned to match the running WSL2 kernel (`6.18.57-microsoft-standard-WSL2` at the time of writing), using Microsoft's own WSL kernel config so the vermagic and ABI line up. Load it at boot via the NixOS module — no kernel replacement, no `.wslconfig` changes.
+
+Trade-off: whenever Windows updates the WSL2 kernel, bump `stockVersion`/`stockModDirVersion`/`stockSrcHash` in `constants.nix` and rebuild.
+
+### Mode B: pinned custom kernel
+
+Builds the **Microsoft WSL2 kernel** from [microsoft/WSL2-Linux-Kernel](https://github.com/microsoft/WSL2-Linux-Kernel) (`linux-msft-wsl-6.18.y`, currently `6.18.58.1`) with Microsoft's config **verbatim**, plus the OpenZFS module against that exact kernel. You select the resulting `bzImage` via `.wslconfig`, so Windows updates can no longer break the module — kernel updates are on you.
+
+The NixOS module **fails loudly** if the running kernel is not the one the module was built for.
 
 ## Build
 
 ```console
-$ nix build .#kernel    # bzImage in ./result/bzImage
-$ nix build .#zfs-kmod  # spl.ko / zfs.ko (used by the NixOS module below)
+$ nix build .#zfs-kmod-stock  # mode A: ZFS kmod for the stock Windows kernel
+$ nix build .#kernel          # mode B: bzImage in ./result/bzImage
+$ nix build .#zfs-kmod        # mode B: ZFS kmod for the flake's kernel
 ```
 
-## Install (Windows side)
+## Install
+
+### Mode A (stock kernel)
+
+Skip the Windows-side steps entirely; only do the NixOS side below (default `wsl-zfs.kmod = "stock-kernel"`).
+
+### Mode B (pinned kernel)
 
 1. Copy the kernel image somewhere Windows-stable, e.g.:
 
@@ -57,6 +72,8 @@ inputs.wsl-zfs.url = "github:m1tm4n404/nixos-wsl-zfs";
 inputs@{ ... }: {
   imports = [ inputs.wsl-zfs.nixosModules.wsl-zfs ];
   wsl-zfs.enable = true;
+  # "stock-kernel" (default) or "custom-kernel" (mode B):
+  # wsl-zfs.kmod = "custom-kernel";
   # optional: import all visible pools without mounting:
   # wsl-zfs.autoImportPools = true;
 }
@@ -66,7 +83,7 @@ Then `sudo nixos-rebuild switch --flake .#yourhost` and verify:
 
 ```console
 $ uname -r
-6.18.58.1-microsoft-standard-WSL2
+6.18.57-microsoft-standard-WSL2   # stock (mode A) — or 6.18.58.1-... (mode B)
 $ zfs version
 zfs-2.4.4-1
 zfs-kmod-2.4.4-1

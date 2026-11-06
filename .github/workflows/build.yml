@@ -14,10 +14,13 @@ jobs:
 
       - uses: DeterminateSystems/nix-installer-action@v16
 
+      - name: Build zfs kernel module (stock kernel)
+        run: nix build .#zfs-kmod-stock -L -o zfs-kmod-stock-out
+
       - name: Build kernel
         run: nix build .#kernel -L -o kernel-out
 
-      - name: Build zfs kernel module
+      - name: Build zfs kernel module (custom kernel)
         run: nix build .#zfs-kmod -L -o zfs-kmod-out
 
       - name: Upload bzImage
@@ -27,10 +30,18 @@ jobs:
           path: kernel-out/bzImage
           if-no-files-found: error
 
-      - name: Upload zfs kmod
+      - name: Upload zfs kmod (custom kernel)
         uses: actions/upload-artifact@v4
         with:
           name: zfs-kmod
           path: |
             zfs-kmod-out/lib/modules/**/*.ko*
+          if-no-files-found: error
+
+      - name: Upload zfs kmod (stock kernel)
+        uses: actions/upload-artifact@v4
+        with:
+          name: zfs-kmod-stock
+          path: |
+            zfs-kmod-stock-out/lib/modules/**/*.ko*
           if-no-files-found: error

@@ -13,12 +13,41 @@ let
   cfg = config.wsl-zfs;
   constants = import ../constants.nix;
 
-  zfs-kmod = self.packages.${pkgs.system}."zfs-kmod";
+  kmods = {
+    # Module for the pinned custom kernel shipped by this flake (.wslconfig).
+    "custom-kernel" = {
+      kmod = self.packages.${pkgs.system}."zfs-kmod";
+      expected = constants.modDirVersion;
+    };
+    # Module for the stock Windows-provided WSL2 kernel (no kernel swap).
+    "stock-kernel" = {
+      kmod = self.packages.${pkgs.system}."zfs-kmod-stock";
+      expected = constants.stockModDirVersion;
+    };
+  };
+  selected = kmods.${cfg.kmod};
+
+  zfs-kmod = selected.kmod;
+  expectedKernel = selected.expected;
   zfs-user = self.packages.${pkgs.system}."zfs-user";
 in
 {
   options.wsl-zfs = {
     enable = lib.mkEnableOption "OpenZFS via this flake's WSL2 kernel + kernel module";
+
+    kmod = lib.mkOption {
+      type = lib.types.enum [
+        "stock-kernel"
+        "custom-kernel"
+      ];
+      default = "stock-kernel";
+      description = ''
+        Which kernel the ZFS module is built for:
+        - stock-kernel: the Windows-provided WSL2 kernel (keep default .wslconfig);
+          must be rebuilt when Windows updates the kernel.
+        - custom-kernel: the kernel built by this flake, selected via .wslconfig.
+      '';
+    };
 
     autoImportPools = lib.mkOption {
       type = lib.types.bool;
@@ -47,7 +76,7 @@ in
         ''
           set -eu
           running="$(${pkgs.coreutils}/bin/uname -r)"
-          expected="${constants.modDirVersion}"
+          expected="${expectedKernel}"
           if [ "$running" != "$expected" ]; then
             echo "ERROR: running kernel '$running' does not match the kernel this ZFS module was built for ('$expected')." >&2
             echo "Copy this flake's bzImage to Windows and select it in .wslconfig, then run 'wsl --shutdown'. See the README." >&2
